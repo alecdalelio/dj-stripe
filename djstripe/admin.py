@@ -2,6 +2,7 @@
 Django Administration interface definitions
 """
 import json
+from urllib.parse import urljoin
 
 from django import forms
 from django.contrib import admin
@@ -624,6 +625,10 @@ class WebhookEndpointAdminEditForm(forms.ModelForm):
         help_text="When disabled, the endpoint will not receive events.",
     )
 
+    class Meta:
+        model = models.WebhookEndpoint
+        fields = ("description", "base_url", "enabled_events", "metadata")
+
     def get_initial_for_field(self, field, field_name):
         if field_name == "base_url":
             djstripe_uuid = self.instance.metadata.get("djstripe_uuid")
@@ -634,15 +639,6 @@ class WebhookEndpointAdminEditForm(forms.ModelForm):
                 )
                 return self.instance.url.replace(endpoint_path, "")
         return super().get_initial_for_field(field, field_name)
-
-    class Meta:
-        model = models.WebhookEndpoint
-        fields = (
-            "description",
-            "base_url",
-            "enabled_events",
-            "metadata",
-        )
 
 
 @admin.register(models.WebhookEndpoint)
@@ -702,18 +698,11 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
             (self.model.__name__, {"fields": core_fields}),
             (
                 "Advanced options",
-                {
-                    "fields": advanced_fields,
-                    "classes": ["collapse"],
-                },
+                {"fields": advanced_fields, "classes": ["collapse"]},
             ),
         ]
 
     def save_model(self, request, obj: "models.WebhookEndpoint", form, change):
-        from urllib.parse import urljoin
-
-        import stripe
-
         base_url = form.data.get("base_url", "")
 
         if obj.djstripe_created:
@@ -749,7 +738,7 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
             metadata = obj.metadata or {}
             metadata["djstripe_uuid"] = str(obj.djstripe_uuid)
 
-            stripe_we = stripe.WebhookEndpoint.create(
+            stripe_we = models.WebhookEndpoint.stripe_class.create(
                 url=url,
                 api_version=obj.api_version or None,
                 description=obj.description,
